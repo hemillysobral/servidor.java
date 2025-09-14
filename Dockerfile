@@ -1,17 +1,19 @@
+# Usa uma imagem com Java
 FROM openjdk:17-jdk-slim
 
+# Cria diretório de trabalho dentro do container
 WORKDIR /app
 
-# Copia seu código
-COPY public ./public
-COPY src ./src
-COPY Servidor.java ./
+# Copia os arquivos Java e HTML/CSS para o container
+COPY Servidor.java .
+COPY index.html .
+COPY style.css .
 
-# Compila
-RUN javac src/Servidor.java
+# Expõe a porta (caso você use isso no código)
+EXPOSE 8080
 
-# Define variável de ambiente
-ENV PORT 8080
+# Compila o código Java
+RUN javac Servidor.java
 
-# Comando para rodar
-CMD ["java", "-cp", "src", "Servidor"]
+# Roda o servidor
+CMD ["java", "Servidor"]
