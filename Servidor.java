@@ -1,61 +1,72 @@
 import com.sun.net.httpserver.HttpServer;
 import com.sun.net.httpserver.HttpExchange;
-
+import com.sun.net.httpserver.HttpHandler;
 import java.io.*;
 import java.net.InetSocketAddress;
 import java.net.URLDecoder;
-import javax.script.ScriptEngineManager;
+import java.nio.file.Files;
 
 public class Servidor {
     public static void main(String[] args) throws Exception {
         HttpServer server = HttpServer.create(new InetSocketAddress(8080), 0);
 
-        server.createContext("/", exchange -> {
+        // Servir arquivos estáticos
+        server.createContext("/", new StaticHandler());
+
+        // Lidar com cálculo
+        server.createContext("/calc", new CalcHandler());
+
+        server.setExecutor(null);
+        server.start();
+        System.out.println("Servidor rodando na porta 8080");
+    }
+
+    static class StaticHandler implements HttpHandler {
+        @Override
+        public void handle(HttpExchange exchange) throws IOException {
             String path = exchange.getRequestURI().getPath();
             if (path.equals("/")) path = "/index.html";
 
             File file = new File("public" + path);
             if (!file.exists()) {
-                exchange.sendResponseHeaders(404, -1);
+                String resposta = "404 Not Found";
+                exchange.sendResponseHeaders(404, resposta.length());
+                exchange.getResponseBody().write(resposta.getBytes());
+                exchange.getResponseBody().close();
                 return;
             }
-
-            byte[] bytes = java.nio.file.Files.readAllBytes(file.toPath());
-            exchange.getResponseHeaders().set("Content-Type", getMimeType(path));
+            byte[] bytes = Files.readAllBytes(file.toPath());
+            // definir tipo de conteúdo
+            String contentType = "text/html";
+            if (path.endsWith(".css")) contentType = "text/css";
+            if (path.endsWith(".js")) contentType = "application/javascript";
+            exchange.getResponseHeaders().set("Content-Type", contentType);
             exchange.sendResponseHeaders(200, bytes.length);
-            OutputStream os = exchange.getResponseBody();
-            os.write(bytes);
-            os.close();
-        });
-
-        server.createContext("/calc", exchange -> {
-            String query = exchange.getRequestURI().getQuery();
-            String expr = query.split("=")[1];
-            expr = URLDecoder.decode(expr, "UTF-8");
-
-            try {
-                var engine = new ScriptEngineManager().getEngineByName("JavaScript");
-                Object result = engine.eval(expr);
-                byte[] response = result.toString().getBytes();
-                exchange.sendResponseHeaders(200, response.length);
-                exchange.getResponseBody().write(response);
-                exchange.getResponseBody().close();
-            } catch (Exception e) {
-                String error = "Erro";
-                exchange.sendResponseHeaders(500, error.length());
-                exchange.getResponseBody().write(error.getBytes());
-                exchange.getResponseBody().close();
-            }
-        });
-
-        server.start();
-        System.out.println("Servidor iniciado em http://localhost:8080");
+            exchange.getResponseBody().write(bytes);
+            exchange.getResponseBody().close();
+        }
     }
 
-    private static String getMimeType(String path) {
-        if (path.endsWith(".html")) return "text/html";
-        if (path.endsWith(".css")) return "text/css";
-        if (path.endsWith(".js")) return "application/javascript";
-        return "text/plain";
+    static class CalcHandler implements HttpHandler {
+        @Override
+        public void handle(HttpExchange exchange) throws IOException {
+            String query = exchange.getRequestURI().getQuery();
+            String resultado = "Erro";
+            if (query != null && query.startsWith("expr=")) {
+                String expr = URLDecoder.decode(query.substring(5), "UTF-8");
+                try {
+                    var engine = new javax.script.ScriptEngineManager().getEngineByName("JavaScript");
+                    Object res = engine.eval(expr);
+                    resultado = String.valueOf(res);
+                } catch (Exception e) {
+                    resultado = "Erro";
+                }
+            }
+            byte[] respBytes = resultado.getBytes();
+            exchange.getResponseHeaders().set("Content-Type", "text/plain");
+            exchange.sendResponseHeaders(200, respBytes.length);
+            exchange.getResponseBody().write(respBytes);
+            exchange.getResponseBody().close();
+        }
     }
 }
